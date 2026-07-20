@@ -78,7 +78,27 @@
     ⏳ กำลังเชื่อมต่อระบบ LINE...
 </div>
 
-<script>
+<!-- ปรับระบบเป็น type="module" เพื่อรองรับการนำเข้า Firebase SDK จากคีย์จริงของน้า -->
+<script type="module">
+    // 1. นำเข้าโมดูล Firebase ผ่านเว็บโดยตรง
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // คีย์ข้อมูลจริงที่น้าก๊อปปี้มาให้เป๊ะๆ
+    const firebaseConfig = {
+      apiKey: "AIzaSyDgU2HELywrmi97-fAr38p5br4VLXIDq6I",
+      authDomain: "my-pokdeng-bot.firebaseapp.com",
+      databaseURL: "https://my-pokdeng-bot-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "my-pokdeng-bot",
+      storageBucket: "my-pokdeng-bot.firebasestorage.app",
+      messagingSenderId: "785545071590",
+      appId: "1:785545071590:web:d787384d4a25856c332427"
+    };
+
+    // เปิดสวิตช์เริ่มเชื่อมต่อฐานข้อมูล
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
     // 🚨 ใส่ LIFF ID ของน้าตรงนี้เรียบร้อยแล้วครับ
     const liffId = "2010761995-NNRUGId3"; 
 
@@ -86,7 +106,7 @@
         try {
             await liff.init({ liffId: liffId });
             if (!liff.isLoggedIn()) {
-                liff.login(); // ถ้ายังไม่ได้ล็อกอิน ให้เด้งหน้าขอสิทธิ์ออโต้
+                liff.login(); 
             } else {
                 const profile = await liff.getProfile();
                 
@@ -105,22 +125,55 @@
         }
     }
 
-    // ทำงานเมื่อกดส่งฟอร์ม
-    document.getElementById('register-form').addEventListener('submit', function(e) {
+    // ทำงานเมื่อผู้เล่นกดส่งฟอร์มลงทะเบียน
+    document.getElementById('register-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        // ดึงค่าที่ลูกค้ากรอกมาเตรียมใช้งาน
-        const userId = document.getElementById('user-id').innerText.replace('Line ID: ', '');
-        const fullname = document.getElementById('fullname').value;
+        // ดึงค่าไอดี LINE จริงและข้อมูลธนาคารที่กรอกเตรียมยิงเข้าระบบ
+        const userId = document.getElementById('user-id').innerText.replace('Line ID: ', '').trim();
+        const fullname = document.getElementById('fullname').value.trim();
         const bank = document.getElementById('bank').value;
-        const account = document.getElementById('bank-account').value;
+        const account = document.getElementById('bank-account').value.trim();
 
-        alert(`ระบบได้รับข้อมูลแล้ว!\nชื่อ: ${fullname}\nธนาคาร: ${bank}\nเลขบัญชี: ${account}\n\n(ขั้นตอนถัดไป: เชื่อมต่อยิงเข้า Firebase)`);
-        
-        // สั่งปิดหน้าต่างไลน์ออโต้หลังจากสมัครเสร็จ
-        liff.closeWindow();
+        if (!userId) {
+            alert("❌ ไม่พบข้อมูล LINE User ID กรุณารีเฟรชหน้าเว็บใหม่อีกครั้งครับ");
+            return;
+        }
+
+        // ชี้เป้าหมายไปที่ห้องฐานข้อมูลเดิมของบอทหลัก Path: system_data/users/ไอดีไลน์ผู้เล่น
+        const userRef = ref(db, 'system_data/users/' + userId);
+
+        try {
+            // ตรวจสอบว่าไอดีไลน์คนนี้เคยมีชื่ออยู่ในระบบของบอทหรือยัง
+            const snapshot = await get(userRef);
+            if (snapshot.exists()) {
+                alert("⚠️ ผู้เล่นไอดีนี้เคยสมัครสมาชิกในระบบบอทป๊อกเด้งแล้วครับน้า!");
+                liff.closeWindow(); // ปิดหน้าต่างไลน์ทันที
+                return;
+            }
+
+            // บันทึกข้อมูลงฐานข้อมูลก้อนเดิม โดยเพิ่มฟิลด์ธนาคารสำหรับระบบฝากถอนออโต้เข้าล็อกบอท
+            await set(userRef, {
+                name: fullname,           // ชื่อจริงตรงบัญชี
+                bankName: bank,           // รหัสธนาคาร (เช่น KBANK, SCB)
+                bankAccount: account,     // เลขบัญชีธนาคาร
+                balance: 0,               // ยอดเครดิตเริ่มต้นตั้งให้เล่นฟรีที่ 0 บาท
+                status: "active",
+                registeredAt: new Date().toISOString()
+            });
+
+            alert("🎉 สมัครสมาชิกสำเร็จ! ข้อมูลถูกผูกเข้าระบบออโต้เรียบร้อยแล้วครับ");
+            
+            // สั่งปิดหน้าต่างไลน์ออโต้หลังจากสมัครเสร็จสิ้น
+            liff.closeWindow();
+
+        } catch (error) {
+            console.error("Firebase save error:", error);
+            alert("❌ เกิดข้อผิดพลาดจากระบบฐานข้อมูล ไม่สามารถบันทึกได้ กรุณาลองใหม่อีกครั้งครับน้า");
+        }
     });
 
+    // เรียกฟังก์ชันเริ่มทำงานระบบดึงโปรไฟล์ LINE เมื่อหน้าเว็บโหลดเสร็จ
     window.onload = initLIFF;
 </script>
 
