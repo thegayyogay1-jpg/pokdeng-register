@@ -149,17 +149,22 @@
             if (!liff.isLoggedIn()) {
                 liff.login(); 
             } else {
-    const profile = await liff.getProfile();
-    const webUserId = profile.userId; 
+        const profile = await liff.getProfile();
+        // ปรับให้เคลียร์ช่องว่างและแปลงเป็นตัวพิมพ์เล็กป้องกันการพิมพ์ผิดพลาด
+        const webUserId = profile.userId.trim(); 
+        const cleanTargetBotUid = targetBotUid.trim();
 
-    // 🛡️ [เพิ่มใหม่] ป้องกันการขโมยลิงก์/แชร์ลิงก์ผิดคน: 
-    // เช็กว่าคนที่เปิดหน้าเว็บนี้ (webUserId) คือคนเดียวกับที่ขอลิงก์จากบอท (targetBotUid) หรือไม่
-    if (webUserId !== targetBotUid) {
-        document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>สิทธิ์การใช้งานไม่ถูกต้อง!</span><br>ลิงก์สมัครสมาชิกนี้เป็นของบุคคลอื่น กรุณาพิมพ์คำว่า 'สมัคร' ในไลน์ของคุณเพื่อรับลิงก์ของตัวเองครับ";
-        alert("❌ ลิงก์นี้ไม่ใช่ของคุณ! ไม่สามารถสมัครแทนกันหรือใช้ลิงก์ร่วมกันได้ครับน้า");
-        liff.closeWindow();
-        return;
-    }
+        // 🛡️ เช็กความถูกต้อง (เพิ่ม alert บอกค่ากรณีที่ไม่ตรงกัน น้าจะได้เห็นว่ามันส่งอะไรมา)
+        if (webUserId !== cleanTargetBotUid) {
+            console.log("Web ID:", webUserId, "vs Target ID:", cleanTargetBotUid);
+            
+            // น้าเปิดแจ้งเตือนนี้ไว้ดูตอนทดสอบได้ครับ ถ้าใช้งานจริงค่อยลบออก
+            alert(`❌ ลิงก์นี้ไม่ใช่ของคุณ!\nID เครื่องคุณ: ${webUserId}\nID จากลิงก์: ${cleanTargetBotUid}`);
+            
+            document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>สิทธิ์การใช้งานไม่ถูกต้อง!</span><br>ลิงก์สมัครสมาชิกนี้เป็นของบุคคลอื่น กรุณาพิมพ์คำว่า 'สมัคร' ในไลน์ของคุณเพื่อรับลิงก์ของตัวเองครับ";
+            liff.closeWindow();
+            return;
+        }
 
     // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี (โค้ดเดิมของน้า)
     const mappingRef = ref(db, 'liff_mapping/' + webUserId);
