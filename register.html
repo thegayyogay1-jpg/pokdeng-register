@@ -97,9 +97,8 @@
     const db = getDatabase(app);
 
     const liffId = "2010761995-NNRUGId3"; 
-    let targetBotUid = ""; // ตัวแปรสำหรับเก็บรหัสบอทหลักที่ดึงมาจากท้ายลิงก์
+    let targetBotUid = ""; 
 
-    // ฟังก์ชันช่วยแกะรหัส ?botUid=xxxx จากท้ายลิงก์ URL
     function getQueryParam(param) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(param);
@@ -107,12 +106,22 @@
 
     async function initLIFF() {
         try {
-            // 1. ดักแกะรหัสบอทหลักจากท้ายลิงก์ก่อนเลย
             targetBotUid = getQueryParam('botUid');
             
-            // 🛡️ ป้องกันความปลอดภัยชั้นที่ 1: ถ้าเปิดมาลอยๆ ไม่มีรหัสบอทท้ายลิงก์ จะไม่ให้สมัคร
             if (!targetBotUid) {
                 document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
+                return;
+            }
+
+            // 🎯 [เพิ่มใหม่] ป้องกันความปลอดภัยชั้นที่ 1: วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ทันที
+            const oldUserRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
+            const oldUserSnapshot = await get(oldUserRef);
+            
+            // ถ้าพบว่าไอดีไลน์บอทเก่านี้ มีข้อมูลธนาคารอยู่แล้ว (แปลว่าเป็นสมาชิกเก่าที่เคยลงทะเบียนแล้ว)
+            if (oldUserSnapshot.exists() && oldUserSnapshot.val().bankAccount) {
+                document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกอยู่แล้ว!</span><br>ไอดีของคุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับ";
+                alert("⚠️ คุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับน้า!");
+                liff.closeWindow();
                 return;
             }
 
@@ -121,19 +130,19 @@
                 liff.login(); 
             } else {
                 const profile = await liff.getProfile();
-                const webUserId = profile.userId; // ไอดีไลน์ฝั่งหน้าเว็บเว็บ
+                const webUserId = profile.userId; 
 
-                // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กว่าไอดีหน้าเว็บนี้เคยผูกบัญชีสำเร็จไปแล้วหรือยัง (ป้องกันสมัครซ้ำ)
+                // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี
                 const mappingRef = ref(db, 'liff_mapping/' + webUserId);
                 const mappingSnapshot = await get(mappingRef);
                 
                 if (mappingSnapshot.exists()) {
-                    alert("⚠️ คุณเคยสมัครสมาชิกและผูกบัญชีออโต้ในระบบเรียบร้อยแล้วครับ!");
+                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเคยผูกบัญชีออโต้แล้ว!</span>";
+                    alert("⚠️ บัญชี LINE นี้เคยทำการผูกระบบออโต้ไปแล้วครับ!");
                     liff.closeWindow();
                     return;
                 }
 
-                // แสดงโปรไฟล์บนหน้าเว็บ
                 document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
                 document.getElementById('user-name').innerText = profile.displayName;
                 document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
@@ -147,7 +156,6 @@
         }
     }
 
-    // ทำงานเมื่อผู้เล่นกดส่งฟอร์มลงทะเบียน
     document.getElementById('register-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -161,23 +169,27 @@
             return;
         }
 
-        // ชี้เป้าไปที่กล่องเดิมของบอทหลัก โดยใช้รหัสบอทหลัก (targetBotUid) ที่ส่งมาจากลิงก์
         const userRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
-        // ชี้เป้าไปที่กล่องประวัติประทับตราล็อกไอดีเว็บ
         const mappingRef = ref(db, 'liff_mapping/' + webUserId);
 
         try {
-            // 🎯 เขียนข้อมูลลงกล่องผู้เล่นตัวเดิมของบอทหลักทันที บอทหลักอ่านต่อได้เลย!
+            // ดึงข้อมูลยอดเงินเดิม (ถ้ามี หรือตั้งค่าเริ่มต้นเป็น 0)
+            const checkSnapshot = await get(userRef);
+            let currentBalance = 0;
+            if (checkSnapshot.exists() && checkSnapshot.val().balance !== undefined) {
+                currentBalance = checkSnapshot.val().balance;
+            }
+
+            // บันทึกข้อมูลทับตำแหน่งเดิม โดยเก็บยอดเงินไว้ให้เหมือนเดิม
             await set(userRef, {
                 name: fullname,
                 bankName: bank,
                 bankAccount: account,
-                balance: 0, // ยอดตั้งต้น หรือน้าจะเอาไปต่อยอดให้ค่าเริ่มตามการคัดคนเข้ากลุ่มก็ได้ครับ
+                balance: currentBalance, 
                 status: "active",
                 registeredAt: new Date().toISOString()
             });
 
-            // 🎯 เขียนตรายางล็อกประวัติไว้ในห้อง liff_mapping ว่าไอดีเว็บนี้ผูกกับรหัสบอทนี้แล้วนะ
             await set(mappingRef, {
                 boundBotUid: targetBotUid,
                 registeredAt: new Date().toISOString()
