@@ -149,29 +149,38 @@
             if (!liff.isLoggedIn()) {
                 liff.login(); 
             } else {
-                const profile = await liff.getProfile();
-                const webUserId = profile.userId; 
+    const profile = await liff.getProfile();
+    const webUserId = profile.userId; 
 
-                // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี
-                const mappingRef = ref(db, 'liff_mapping/' + webUserId);
-                const mappingSnapshot = await get(mappingRef);
-                
-                if (mappingSnapshot.exists()) {
-                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเคยผูกบัญชีออโต้แล้ว!</span>";
-                    alert("⚠️ บัญชี LINE นี้เคยทำการผูกระบบออโต้ไปแล้วครับ!");
-                    liff.closeWindow();
-                    return;
-                }
+    // 🛡️ [เพิ่มใหม่] ป้องกันการขโมยลิงก์/แชร์ลิงก์ผิดคน: 
+    // เช็กว่าคนที่เปิดหน้าเว็บนี้ (webUserId) คือคนเดียวกับที่ขอลิงก์จากบอท (targetBotUid) หรือไม่
+    if (webUserId !== targetBotUid) {
+        document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>สิทธิ์การใช้งานไม่ถูกต้อง!</span><br>ลิงก์สมัครสมาชิกนี้เป็นของบุคคลอื่น กรุณาพิมพ์คำว่า 'สมัคร' ในไลน์ของคุณเพื่อรับลิงก์ของตัวเองครับ";
+        alert("❌ ลิงก์นี้ไม่ใช่ของคุณ! ไม่สามารถสมัครแทนกันหรือใช้ลิงก์ร่วมกันได้ครับน้า");
+        liff.closeWindow();
+        return;
+    }
 
-                // นำข้อมูลโปรไฟล์มาแสดงในหน้าฟอร์ม
-                document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
-                document.getElementById('user-name').innerText = profile.displayName;
-                document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
-                
-                // ซ่อนหน้าจอโหลด แล้วแสดงการ์ดสมัครสมาชิก
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('main-card').style.display = 'block';
-            }
+    // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี (โค้ดเดิมของน้า)
+    const mappingRef = ref(db, 'liff_mapping/' + webUserId);
+    const mappingSnapshot = await get(mappingRef);
+    
+    if (mappingSnapshot.exists()) {
+        document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเคยผูกบัญชีออโต้แล้ว!</span>";
+        alert("⚠️ บัญชี LINE นี้เคยทำการผูกระบบออโต้ไปแล้วครับ!");
+        liff.closeWindow();
+        return;
+    }
+
+    // นำข้อมูลโปรไฟล์มาแสดงในหน้าฟอร์ม (โค้ดเดิมของน้า)
+    document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
+    document.getElementById('user-name').innerText = profile.displayName;
+    document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
+    
+    // ซ่อนหน้าจอโหลด แล้วแสดงการ์ดสมัครสมาชิก (โค้ดเดิมของน้า)
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('main-card').style.display = 'block';
+}
         } catch (error) {
             console.error("LIFF Initialization failed", error);
             document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>เกิดข้อผิดพลาดในการเชื่อมต่อระบบ LINE</span><br>" + error.message;
