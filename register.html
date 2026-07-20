@@ -100,18 +100,50 @@
     let targetBotUid = ""; 
 
     function getQueryParam(param) {
-        const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(param);
+    // 1. ลองดึงจากพารามิเตอร์ปกติก่อน
+    const urlParams = new URLSearchParams(window.location.search);
+    let value = urlParams.get(param);
+    
+    // 2. ถ้าดึงปกติไม่เจอ ให้ดึงจาก Hash (#) ที่ LINE ชอบแปลงอัตโนมัติ
+    if (!value && window.location.href.includes('#')) {
+        const hashPart = window.location.href.split('#')[1];
+        const searchParams = new URLSearchParams(hashPart.split('?')[1] || hashPart);
+        value = searchParams.get(param);
     }
+    
+    return value ? value.trim() : null;
+}
 
     async function initLIFF() {
-        try {
-            targetBotUid = getQueryParam('botUid');
-            
-            if (!targetBotUid) {
-                document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
-                return;
-            }
+    try {
+        // ให้ระบบ LINE LIFF เริ่มทำงานก่อน เพื่อจัดระเบียบลิงก์ URL
+        await liff.init({ liffId: liffId });
+        
+        // หลังจากเปิด LIFF แล้ว ค่อยสั่งให้ฟังก์ชันไปแกะค่า botUid ออกมา
+        targetBotUid = getQueryParam('botUid');
+        
+        if (!targetBotUid) {
+            document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
+            return;
+        }
+
+        // 🎯 วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ต่อตามปกติ
+        const oldUserRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
+        const oldUserSnapshot = await get(oldUserRef);
+        
+        if (oldUserSnapshot.exists() && oldUserSnapshot.val().bankAccount) {
+            document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกอยู่แล้ว!</span><br>ไอดีของคุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับ";
+            alert("⚠️ คุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับน้า!");
+            liff.closeWindow();
+            return;
+        }
+
+        // เช็กการเข้าสู่ระบบต่อได้เลย (ลบการสั่ง init ซ้ำออก)
+        if (!liff.isLoggedIn()) {
+            liff.login(); 
+        } else {
+            const profile = await liff.getProfile();
+            const webUserId = profile.userId; 
 
             // 🎯 [เพิ่มใหม่] ป้องกันความปลอดภัยชั้นที่ 1: วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ทันที
             const oldUserRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
