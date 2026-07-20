@@ -129,7 +129,7 @@
     document.getElementById('register-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        // ดึงค่าไอดี LINE จริงและข้อมูลธนาคารที่กรอกเตรียมยิงเข้าระบบ
+        // ดึงค่าไอดี LINE จริงและข้อมูลธนาคาร
         const userId = document.getElementById('user-id').innerText.replace('Line ID: ', '').trim();
         const fullname = document.getElementById('fullname').value.trim();
         const bank = document.getElementById('bank').value;
@@ -140,31 +140,29 @@
             return;
         }
 
-        // ชี้เป้าหมายไปที่ห้องฐานข้อมูลเดิมของบอทหลัก Path: system_data/users/ไอดีไลน์ผู้เล่น
-        const userRef = ref(db, 'system_data/users/' + userId);
+        // 🎯 แก้จุดนี้: ชี้เป้าหมายไปที่กระเป๋าของระบบเก่าเป๊ะๆ (จาก system_data/users เปลี่ยนเป็น usersWallets)
+        const userRef = ref(db, 'usersWallets/' + userId);
 
         try {
-            // ตรวจสอบว่าไอดีไลน์คนนี้เคยมีชื่ออยู่ในระบบของบอทหรือยัง
+            // ตรวจสอบว่าไอดีไลน์คนนี้เคยมีชื่ออยู่ในระบบของบอทเก่าหรือยัง
             const snapshot = await get(userRef);
             if (snapshot.exists()) {
                 alert("⚠️ ผู้เล่นไอดีนี้เคยสมัครสมาชิกในระบบบอทป๊อกเด้งแล้วครับน้า!");
-                liff.closeWindow(); // ปิดหน้าต่างไลน์ทันที
+                liff.closeWindow(); 
                 return;
             }
 
-            // บันทึกข้อมูลงฐานข้อมูลก้อนเดิม โดยเพิ่มฟิลด์ธนาคารสำหรับระบบฝากถอนออโต้เข้าล็อกบอท
+            // บันทึกข้อมูลงฐานข้อมูลก้อนเดิมใน usersWallets
             await set(userRef, {
                 name: fullname,           // ชื่อจริงตรงบัญชี
-                bankName: bank,           // รหัสธนาคาร (เช่น KBANK, SCB)
+                bankName: bank,           // รหัสธนาคาร
                 bankAccount: account,     // เลขบัญชีธนาคาร
-                balance: 0,               // ยอดเครดิตเริ่มต้นตั้งให้เล่นฟรีที่ 0 บาท
+                balance: 0,               // ยอดเครดิตเริ่มต้น
                 status: "active",
                 registeredAt: new Date().toISOString()
             });
 
             alert("🎉 สมัครสมาชิกสำเร็จ! ข้อมูลถูกผูกเข้าระบบออโต้เรียบร้อยแล้วครับ");
-            
-            // สั่งปิดหน้าต่างไลน์ออโต้หลังจากสมัครเสร็จสิ้น
             liff.closeWindow();
 
         } catch (error) {
