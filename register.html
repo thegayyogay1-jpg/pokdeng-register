@@ -78,13 +78,11 @@
     ⏳ กำลังเชื่อมต่อระบบ LINE...
 </div>
 
-<!-- ปรับระบบเป็น type="module" เพื่อรองรับการนำเข้า Firebase SDK จากคีย์จริงของน้า -->
 <script type="module">
-    // 1. นำเข้าโมดูล Firebase ผ่านเว็บโดยตรง
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // คีย์ข้อมูลจริงที่น้าก๊อปปี้มาให้เป๊ะๆ
+    // คีย์ข้อมูลจริงจากน้า
     const firebaseConfig = {
       apiKey: "AIzaSyDgU2HELywrmi97-fAr38p5br4VLXIDq6I",
       authDomain: "my-pokdeng-bot.firebaseapp.com",
@@ -95,27 +93,51 @@
       appId: "1:785545071590:web:d787384d4a25856c332427"
     };
 
-    // เปิดสวิตช์เริ่มเชื่อมต่อฐานข้อมูล
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 🚨 ใส่ LIFF ID ของน้าตรงนี้เรียบร้อยแล้วครับ
     const liffId = "2010761995-NNRUGId3"; 
+    let targetBotUid = ""; // ตัวแปรสำหรับเก็บรหัสบอทหลักที่ดึงมาจากท้ายลิงก์
+
+    // ฟังก์ชันช่วยแกะรหัส ?botUid=xxxx จากท้ายลิงก์ URL
+    function getQueryParam(param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(param);
+    }
 
     async function initLIFF() {
         try {
+            // 1. ดักแกะรหัสบอทหลักจากท้ายลิงก์ก่อนเลย
+            targetBotUid = getQueryParam('botUid');
+            
+            // 🛡️ ป้องกันความปลอดภัยชั้นที่ 1: ถ้าเปิดมาลอยๆ ไม่มีรหัสบอทท้ายลิงก์ จะไม่ให้สมัคร
+            if (!targetBotUid) {
+                document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
+                return;
+            }
+
             await liff.init({ liffId: liffId });
             if (!liff.isLoggedIn()) {
                 liff.login(); 
             } else {
                 const profile = await liff.getProfile();
+                const webUserId = profile.userId; // ไอดีไลน์ฝั่งหน้าเว็บเว็บ
+
+                // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กว่าไอดีหน้าเว็บนี้เคยผูกบัญชีสำเร็จไปแล้วหรือยัง (ป้องกันสมัครซ้ำ)
+                const mappingRef = ref(db, 'liff_mapping/' + webUserId);
+                const mappingSnapshot = await get(mappingRef);
                 
-                // แสดงข้อมูลโปรไฟล์ไลน์บนหน้าเว็บ
+                if (mappingSnapshot.exists()) {
+                    alert("⚠️ คุณเคยสมัครสมาชิกและผูกบัญชีออโต้ในระบบเรียบร้อยแล้วครับ!");
+                    liff.closeWindow();
+                    return;
+                }
+
+                // แสดงโปรไฟล์บนหน้าเว็บ
                 document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
                 document.getElementById('user-name').innerText = profile.displayName;
                 document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
                 
-                // ซ่อนหน้าโหลด แสดงหน้าฟอร์มจริง
                 document.getElementById('loading-screen').style.display = 'none';
                 document.getElementById('main-card').style.display = 'block';
             }
@@ -129,49 +151,47 @@
     document.getElementById('register-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        // ดึงค่าไอดี LINE จริงและข้อมูลธนาคาร
-        const userId = document.getElementById('user-id').innerText.replace('Line ID: ', '').trim();
+        const webUserId = document.getElementById('user-id').innerText.replace('Line ID: ', '').trim();
         const fullname = document.getElementById('fullname').value.trim();
         const bank = document.getElementById('bank').value;
         const account = document.getElementById('bank-account').value.trim();
 
-        if (!userId) {
-            alert("❌ ไม่พบข้อมูล LINE User ID กรุณารีเฟรชหน้าเว็บใหม่อีกครั้งครับ");
+        if (!webUserId || !targetBotUid) {
+            alert("❌ ข้อมูลไม่ครบถ้วน กรุณาลองใหม่อีกครั้งครับ");
             return;
         }
 
-        // 🎯 แก้จุดนี้: ชี้เป้าหมายไปที่กระเป๋าของระบบเก่าเป๊ะๆ (จาก system_data/users เปลี่ยนเป็น usersWallets)
-        const userRef = ref(db, 'system_data/usersWallets/' + userId);
+        // ชี้เป้าไปที่กล่องเดิมของบอทหลัก โดยใช้รหัสบอทหลัก (targetBotUid) ที่ส่งมาจากลิงก์
+        const userRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
+        // ชี้เป้าไปที่กล่องประวัติประทับตราล็อกไอดีเว็บ
+        const mappingRef = ref(db, 'liff_mapping/' + webUserId);
 
         try {
-            // ตรวจสอบว่าไอดีไลน์คนนี้เคยมีชื่ออยู่ในระบบของบอทเก่าหรือยัง
-            const snapshot = await get(userRef);
-            if (snapshot.exists()) {
-                alert("⚠️ ผู้เล่นไอดีนี้เคยสมัครสมาชิกในระบบบอทป๊อกเด้งแล้วครับน้า!");
-                liff.closeWindow(); 
-                return;
-            }
-
-            // บันทึกข้อมูลงฐานข้อมูลก้อนเดิมใน usersWallets
+            // 🎯 เขียนข้อมูลลงกล่องผู้เล่นตัวเดิมของบอทหลักทันที บอทหลักอ่านต่อได้เลย!
             await set(userRef, {
-                name: fullname,           // ชื่อจริงตรงบัญชี
-                bankName: bank,           // รหัสธนาคาร
-                bankAccount: account,     // เลขบัญชีธนาคาร
-                balance: 0,               // ยอดเครดิตเริ่มต้น
+                name: fullname,
+                bankName: bank,
+                bankAccount: account,
+                balance: 0, // ยอดตั้งต้น หรือน้าจะเอาไปต่อยอดให้ค่าเริ่มตามการคัดคนเข้ากลุ่มก็ได้ครับ
                 status: "active",
                 registeredAt: new Date().toISOString()
             });
 
-            alert("🎉 สมัครสมาชิกสำเร็จ! ข้อมูลถูกผูกเข้าระบบออโต้เรียบร้อยแล้วครับ");
+            // 🎯 เขียนตรายางล็อกประวัติไว้ในห้อง liff_mapping ว่าไอดีเว็บนี้ผูกกับรหัสบอทนี้แล้วนะ
+            await set(mappingRef, {
+                boundBotUid: targetBotUid,
+                registeredAt: new Date().toISOString()
+            });
+
+            alert("🎉 สมัครสมาชิกสำเร็จ! ข้อมูลถูกผูกเข้าระบบบอทออโต้เรียบร้อยแล้วครับ");
             liff.closeWindow();
 
         } catch (error) {
             console.error("Firebase save error:", error);
-            alert("❌ เกิดข้อผิดพลาดจากระบบฐานข้อมูล ไม่สามารถบันทึกได้ กรุณาลองใหม่อีกครั้งครับน้า");
+            alert("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้งครับน้า");
         }
     });
 
-    // เรียกฟังก์ชันเริ่มทำงานระบบดึงโปรไฟล์ LINE เมื่อหน้าเว็บโหลดเสร็จ
     window.onload = initLIFF;
 </script>
 
