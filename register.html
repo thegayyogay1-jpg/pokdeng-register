@@ -22,6 +22,14 @@
         .form-group label span { color: #ef4444; }
         .form-group input, .form-group select { width: 100%; padding: 12px 15px; background-color: #111827; border: 1px solid #374151; border-radius: 10px; color: #ffffff; font-size: 16px; transition: all 0.3s; }
         .form-group input:focus, .form-group select:focus { border-color: #10b981; outline: none; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
+        
+        /* สไตล์เพิ่มเติมสำหรับช่องโค้ดยืนยัน */
+        .code-input-wrapper { display: flex; gap: 10px; }
+        .code-input-wrapper input { background-color: #1f2937; color: #f59e0b; font-weight: bold; letter-spacing: 1px; text-align: center; border: 1px dashed #f59e0b; cursor: not-allowed; }
+        .btn-copy { padding: 0 15px; background-color: #374151; border: 1px solid #4b5563; border-radius: 10px; color: #ffffff; font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+        .btn-copy:hover { background-color: #4b5563; }
+        .notice-text { color: #f59e0b; font-size: 12px; margin-top: 6px; line-height: 1.4; display: block; }
+        
         .btn-submit { width: 100%; padding: 14px; background-color: #10b981; border: none; border-radius: 10px; color: #ffffff; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
         .btn-submit:hover { background-color: #059669; }
         .loading { text-align: center; color: #10b981; font-size: 16px; padding: 20px; }
@@ -70,6 +78,16 @@
             <input type="number" id="bank-account" placeholder="กรอกเฉพาะตัวเลข" required>
         </div>
 
+        <!-- 🎯 ช่องโค้ดยืนยันอัจฉริยะแบบที่น้าออกแบบ -->
+        <div class="form-group">
+            <label>รหัสยืนยันระบบออโต้ (ระบบสุ่มให้)</label>
+            <div class="code-input-wrapper">
+                <input type="text" id="verify-code" readonly>
+                <button type="button" class="btn-copy" id="btn-copy-code">📋 คัดลอกรหัส</button>
+            </div>
+            <small class="notice-text">⚠️ **ข้อสำคัญ:** หลังจากกดลงทะเบียนสำเร็จแล้ว กรุณากดคัดลอกรหัสนี้ไปส่งในกลุ่มไลน์ของน้าทันที เพื่อเปิดใช้งานระบบออโต้ครับ</small>
+        </div>
+
         <button type="submit" class="btn-submit">🔒 ยืนยันการลงทะเบียน</button>
     </form>
 </div>
@@ -82,7 +100,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // คีย์ข้อมูลจริงจากน้า
+    // คีย์ข้อมูลของน้าเหมือนเดิม
     const firebaseConfig = {
       apiKey: "AIzaSyDgU2HELywrmi97-fAr38p5br4VLXIDq6I",
       authDomain: "my-pokdeng-bot.firebaseapp.com",
@@ -97,101 +115,67 @@
     const db = getDatabase(app);
 
     const liffId = "2010761995-NNRUGId3"; 
-    let targetBotUid = ""; 
+    let generatedCode = ""; 
 
-    function getQueryParam(param) {
-    // 1. ลองดึงจากพารามิเตอร์ปกติก่อน
-    const urlParams = new URLSearchParams(window.location.search);
-    let value = urlParams.get(param);
-    
-    // 2. ถ้าดึงปกติไม่เจอ ให้ดึงจาก Hash (#) ที่ LINE ชอบแปลงอัตโนมัติ
-    if (!value && window.location.href.includes('#')) {
-        const hashPart = window.location.href.split('#')[1];
-        const searchParams = new URLSearchParams(hashPart.split('?')[1] || hashPart);
-        value = searchParams.get(param);
+    // ฟังก์ชันสุ่มตัวเลข 6 หลักตามแผนใหม่
+    function generateRandomCode() {
+        const randNum = Math.floor(100000 + Math.random() * 900000); // สุ่มเลข 6 หลัก (100000 - 999999)
+        return `c/${randNum}`;
     }
-    
-    return value ? value.trim() : null;
-}
 
-   async function initLIFF() {
+    async function initLIFF() {
         try {
-            // 1. ลองดึงค่า botUid ตั้งแต่เริ่มแรกก่อนเลย
-            targetBotUid = getQueryParam('botUid');
-            
-            // 2. สั่งให้ LINE LIFF เริ่มทำงาน
             await liff.init({ liffId: liffId });
-            
-            // 3. ถ้าดึงรอบแรกไม่เจอ ให้ลองดึงซ้ำอีกครั้งหลังจาก LIFF โหลดเสร็จ (เผื่อ LINE สลับลิงก์)
-            if (!targetBotUid) {
-                targetBotUid = getQueryParam('botUid');
-            }
-            
-            // 4. ถ้าทำทุกทางแล้วยังไม่มีค่าจริงๆ ถึงค่อยแจ้งเตือนลิงก์ไม่ถูกต้อง
-            if (!targetBotUid) {
-                document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
-                return;
-            }
-
-            // 🎯 วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ทันที
-            const oldUserRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
-            const oldUserSnapshot = await get(oldUserRef);
-            
-            // ถ้าพบว่าไอดีไลน์บอทเก่านี้ มีข้อมูลธนาคารอยู่แล้ว
-            if (oldUserSnapshot.exists() && oldUserSnapshot.val().bankAccount) {
-                document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกอยู่แล้ว!</span><br>ไอดีของคุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับ";
-                alert("⚠️ คุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับน้า!");
-                liff.closeWindow();
-                return;
-            }
-
-            // เช็กสถานะการเข้าสู่ระบบ LINE
             if (!liff.isLoggedIn()) {
                 liff.login(); 
             } else {
-        const profile = await liff.getProfile();
-        // ปรับให้เคลียร์ช่องว่างและแปลงเป็นตัวพิมพ์เล็กป้องกันการพิมพ์ผิดพลาด
-        const webUserId = profile.userId.trim(); 
-        const cleanTargetBotUid = targetBotUid.trim();
+                const profile = await liff.getProfile();
+                const webUserId = profile.userId; 
 
-        // 🛡️ เช็กความถูกต้อง (เพิ่ม alert บอกค่ากรณีที่ไม่ตรงกัน น้าจะได้เห็นว่ามันส่งอะไรมา)
-        if (webUserId !== cleanTargetBotUid) {
-            console.log("Web ID:", webUserId, "vs Target ID:", cleanTargetBotUid);
-            
-            // น้าเปิดแจ้งเตือนนี้ไว้ดูตอนทดสอบได้ครับ ถ้าใช้งานจริงค่อยลบออก
-            alert(`❌ ลิงก์นี้ไม่ใช่ของคุณ!\nID เครื่องคุณ: ${webUserId}\nID จากลิงก์: ${cleanTargetBotUid}`);
-            
-            document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>สิทธิ์การใช้งานไม่ถูกต้อง!</span><br>ลิงก์สมัครสมาชิกนี้เป็นของบุคคลอื่น กรุณาพิมพ์คำว่า 'สมัคร' ในไลน์ของคุณเพื่อรับลิงก์ของตัวเองครับ";
-            liff.closeWindow();
-            return;
-        }
+                // 🛡️ เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี (ถ้าบัญชี LINE นี้ผูกถาวรไปแล้ว ไม่ให้สมัครซ้ำ)
+                const mappingRef = ref(db, 'liff_mapping/' + webUserId);
+                const mappingSnapshot = await get(mappingRef);
+                
+                if (mappingSnapshot.exists()) {
+                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเคยผูกบัญชีออโต้แล้ว!</span><br>บัญชี LINE นี้ทำรายการผูกระบบไปเรียบร้อยแล้วครับ";
+                    alert("⚠️ บัญชี LINE นี้เคยทำการผูกระบบออโต้ไปแล้วครับ!");
+                    liff.closeWindow();
+                    return;
+                }
 
-    // 🛡️ ป้องกันความปลอดภัยชั้นที่ 2: เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี (โค้ดเดิมของน้า)
-    const mappingRef = ref(db, 'liff_mapping/' + webUserId);
-    const mappingSnapshot = await get(mappingRef);
-    
-    if (mappingSnapshot.exists()) {
-        document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเคยผูกบัญชีออโต้แล้ว!</span>";
-        alert("⚠️ บัญชี LINE นี้เคยทำการผูกระบบออโต้ไปแล้วครับ!");
-        liff.closeWindow();
-        return;
-    }
+                // สุ่มโค้ดสะพานเชื่อมรอไว้ทันทีตอนเปิดหน้าเว็บ
+                generatedCode = generateRandomCode();
+                document.getElementById('verify-code').value = generatedCode;
 
-    // นำข้อมูลโปรไฟล์มาแสดงในหน้าฟอร์ม (โค้ดเดิมของน้า)
-    document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
-    document.getElementById('user-name').innerText = profile.displayName;
-    document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
-    
-    // ซ่อนหน้าจอโหลด แล้วแสดงการ์ดสมัครสมาชิก (โค้ดเดิมของน้า)
-    document.getElementById('loading-screen').style.display = 'none';
-    document.getElementById('main-card').style.display = 'block';
-}
+                // ใส่ข้อมูลโปรไฟล์ลงหน้าจอ
+                document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
+                document.getElementById('user-name').innerText = profile.displayName;
+                document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
+                
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('main-card').style.display = 'block';
+            }
         } catch (error) {
             console.error("LIFF Initialization failed", error);
-            document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>เกิดข้อผิดพลาดในการเชื่อมต่อระบบ LINE</span><br>" + error.message;
+            document.getElementById('loading-screen').innerText = "❌ เกิดข้อผิดพลาดในการเชื่อมต่อระบบ LINE";
         }
     }
 
+    // ระบบคลิกคัดลอกรหัสลงคลิปบอร์ด
+    document.getElementById('btn-copy-code').addEventListener('click', function() {
+        const codeInput = document.getElementById('verify-code');
+        navigator.clipboard.writeText(codeInput.value).then(() => {
+            alert("📋 คัดลอกรหัส: " + codeInput.value + " เรียบร้อยแล้วครับ! อย่าลืมเอาไปส่งในกลุ่มนะครับ");
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            // กรณีเบราว์เซอร์เก่าจัดๆ ให้คัดลอกด้วยวิธีดั้งเดิม
+            codeInput.select();
+            document.execCommand('copy');
+            alert("📋 คัดลอกรหัสเรียบร้อยแล้วครับ!");
+        });
+    });
+
+    // ตอนกดยืนยันการลงทะเบียน
     document.getElementById('register-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -200,38 +184,28 @@
         const bank = document.getElementById('bank').value;
         const account = document.getElementById('bank-account').value.trim();
 
-        if (!webUserId || !targetBotUid) {
+        if (!webUserId || !generatedCode) {
             alert("❌ ข้อมูลไม่ครบถ้วน กรุณาลองใหม่อีกครั้งครับ");
             return;
         }
 
-        const userRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
-        const mappingRef = ref(db, 'liff_mapping/' + webUserId);
+        // แปลงรหัสสุ่มให้ไม่มีเครื่องหมาย / เพื่อป้องกันโฟลเดอร์ใน Firebase บิดเบี้ยว (เช่น จาก c/123456 เป็น c_123456)
+        const dbCodePath = generatedCode.replace('/', '_');
+        
+        // 🎯 บันทึกเข้าถังพักชั่วคราว (pending_verify) รอให้บอท 1 มารับช่วงต่อ
+        const pendingRef = ref(db, 'pending_verify/' + dbCodePath);
 
         try {
-            // ดึงข้อมูลยอดเงินเดิม (ถ้ามี หรือตั้งค่าเริ่มต้นเป็น 0)
-            const checkSnapshot = await get(userRef);
-            let currentBalance = 0;
-            if (checkSnapshot.exists() && checkSnapshot.val().balance !== undefined) {
-                currentBalance = checkSnapshot.val().balance;
-            }
-
-            // บันทึกข้อมูลทับตำแหน่งเดิม โดยเก็บยอดเงินไว้ให้เหมือนเดิม
-            await set(userRef, {
+            // บันทึกข้อมูลที่สมาชิกกรอกลงกล่องชั่วคราว
+            await set(pendingRef, {
                 name: fullname,
                 bankName: bank,
                 bankAccount: account,
-                balance: currentBalance, 
-                status: "active",
                 registeredAt: new Date().toISOString()
             });
 
-            await set(mappingRef, {
-                boundBotUid: targetBotUid,
-                registeredAt: new Date().toISOString()
-            });
-
-            alert("🎉 สมัครสมาชิกสำเร็จ! ข้อมูลถูกผูกเข้าระบบบอทออโต้เรียบร้อยแล้วครับ");
+            // ปลุกแจ้งเตือนและย้ำให้น้าๆ คัดลอกโค้ดอีกครั้ง
+            alert(`🎉 ลงทะเบียนสำเร็จ!\n\nกรุณานำโค้ด: ${generatedCode} ไปพิมพ์ส่งในกลุ่มไลน์ทันทีเพื่อเปิดระบบออโต้ครับน้า`);
             liff.closeWindow();
 
         } catch (error) {
