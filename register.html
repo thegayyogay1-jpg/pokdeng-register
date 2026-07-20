@@ -141,7 +141,7 @@
         }
 
         // 🎯 แก้จุดนี้: ชี้เป้าหมายไปที่กระเป๋าของระบบเก่าเป๊ะๆ (จาก system_data/users เปลี่ยนเป็น usersWallets)
-        const userRef = ref(db, 'usersWallets/' + userId);
+        const userRef = ref(db, 'system_data/usersWallets/' + userId);
 
         try {
             // ตรวจสอบว่าไอดีไลน์คนนี้เคยมีชื่ออยู่ในระบบของบอทเก่าหรือยัง
