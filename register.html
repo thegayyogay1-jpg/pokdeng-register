@@ -3,60 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>สมัครสมาชิก PokDeng System</title>
+    <title>สมัครสมาชิกระบบออโต้</title>
+    <!-- นำเข้า LINE SDK เพื่อดึงข้อมูลโปรไฟล์ -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Arial', sans-serif; }
-        body { background-color: #0b0c10; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-        .card { background-color: #1a1c23; border: 2px solid #2b2f3a; border-radius: 20px; width: 100%; max-width: 450px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
-        .header { background-color: #00aa5b; color: white; text-align: center; padding: 25px 20px; border-bottom: 4px solid #008f4c; }
-        .header h2 { font-size: 24px; margin-bottom: 5px; letter-spacing: 1px; }
-        .header p { font-size: 14px; color: #e0e0e0; }
-        .body { padding: 25px 20px; }
-        .info-box { background-color: #242834; border: 1px solid #383e50; border-radius: 10px; padding: 15px; text-align: center; color: #ffffff; margin-bottom: 20px; }
-        .info-box span { display: block; font-size: 12px; color: #00ff88; margin-bottom: 5px; font-weight: bold; }
-        .info-box strong { font-size: 18px; }
-        .alert-box { background-color: #3d242b; border: 1px solid #6b2f3e; border-radius: 10px; padding: 15px; text-align: center; color: #ff6b6b; margin-bottom: 25px; font-size: 14px; line-height: 1.5; }
-        .alert-box strong { display: block; margin-bottom: 5px; font-size: 16px; color: #ff4757; }
-        .btn-line { display: flex; align-items: center; justify-content: center; background-color: #00b900; color: white; text-decoration: none; padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold; width: 100%; border: none; cursor: pointer; transition: background 0.2s; box-shadow: 0 4px 12px rgba(0,185,0,0.3); }
-        .btn-line:hover { background-color: #009900; }
-        .footer-text { font-size: 12px; color: #7f8c8d; text-align: center; margin-top: 20px; line-height: 1.6; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0b0f19; color: #ffffff; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .card { background: linear-gradient(145deg, #111827, #1f2937); border-radius: 20px; width: 100%; max-width: 450px; padding: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #10b981; }
+        .header { text-align: center; margin-bottom: 25px; }
+        .header h2 { color: #10b981; font-size: 24px; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .header p { color: #9ca3af; font-size: 14px; }
+        .profile-box { background-color: #1f2937; border-radius: 15px; padding: 15px; display: flex; align-items: center; gap: 15px; margin-bottom: 25px; border: 1px solid #374151; }
+        .profile-img { width: 60px; height: 60px; border-radius: 50%; border: 2px solid #10b981; background-color: #374151; object-fit: cover; }
+        .profile-info h4 { color: #ffffff; font-size: 16px; margin-bottom: 3px; }
+        .profile-info p { color: #6b7280; font-size: 12px; word-break: break-all; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; color: #9ca3af; font-size: 14px; margin-bottom: 8px; }
+        .form-group label span { color: #ef4444; }
+        .form-group input, .form-group select { width: 100%; padding: 12px 15px; background-color: #111827; border: 1px solid #374151; border-radius: 10px; color: #ffffff; font-size: 16px; transition: all 0.3s; }
+        .form-group input:focus, .form-group select:focus { border-color: #10b981; outline: none; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
+        .btn-submit { width: 100%; padding: 14px; background-color: #10b981; border: none; border-radius: 10px; color: #ffffff; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
+        .btn-submit:hover { background-color: #059669; }
+        .loading { text-align: center; color: #10b981; font-size: 16px; padding: 20px; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <!-- ส่วนหัวการ์ด -->
-        <div class="header">
-            <h2>🎰 สมัครสมาชิก</h2>
-            <p>กรอกข้อมูลเพื่อเปิดบัญชีเครดิตออโต้</p>
-        </div>
+<div class="card" id="main-card" style="display: none;">
+    <div class="header">
+        <h2>🎰 สมัครสมาชิก</h2>
+        <p>กรอกข้อมูลเพื่อรับระบบฝาก-ถอนออโต้</p>
+    </div>
 
-        <!-- ส่วนเนื้อหา -->
-        <div class="body">
-            <!-- แสดงผู้แนะนำ (ถ้ามีระบบดึงค่า หรือใส่แบบ Fix ไว้) -->
-            <div class="info-box">
-                <span>👤 แนะนำโดย</span>
-                <strong>ระบบออโต้กลุ่มหลัก</strong>
-            </div>
-
-            <!-- กล่องแจ้งเตือนดักเบราว์เซอร์ภายนอก -->
-            <div class="alert-box">
-                <strong>❌ แจ้งเตือนความปลอดภัย</strong>
-                ⚠️ ต้องเปิดด้วย "แอป LINE" เท่านั้น<br>เปิดผ่านเบราว์เซอร์/แอปอื่น จะสมัครไม่ได้
-            </div>
-
-            <!-- ปุ่มกดสำคัญ (ใส่ลิงก์ LINE LIFF หรือ ลิงก์บอทของน้า) -->
-            <!-- 🎯 เอาลิงก์ LINE OA ตัวที่สอง (ตัวทำธุรการ) ของน้ามาใส่ตรงนี้ครับ -->
-<a href="https://lin.ee/5mwwCM9" class="btn-line">
-    📱 เปิดด้วยแอป LINE เพื่อสมัครสมาชิก
-</a>
-
-            <!-- คำแนะนำเพิ่มเติม -->
-            <p class="footer-text">
-                แตะปุ่ม "เปิดด้วยแอป LINE" ด้านบน • ถ้าไม่เด้ง: แตะ ••• / Aa มุมขวาบน &rarr; "เปิดในเบราว์เซอร์อื่น" แล้วลองใหม่อีกครั้ง
-            </p>
+    <!-- ส่วนแสดงข้อมูลโปรไฟล์ LINE ที่ดึงมาออโต้ -->
+    <div class="profile-box">
+        <img src="" alt="Profile" class="profile-img" id="user-avatar">
+        <div class="profile-info">
+            <h4 id="user-name">กำลังโหลดชื่อ...</h4>
+            <p id="user-id">Line ID: Loading...</p>
         </div>
     </div>
+
+    <!-- ฟอร์มกรอกข้อมูล -->
+    <form id="register-form">
+        <div class="form-group">
+            <label>ชื่อ - นามสกุล (ตรงกับบัญชีธนาคาร) <span>*</span></label>
+            <input type="text" id="fullname" placeholder="นาย ร่ำรวย เงินทอง" required>
+        </div>
+
+        <div class="form-group">
+            <label>เลือกธนาคาร <span>*</span></label>
+            <select id="bank" required>
+                <option value="" disabled selected>-- เลือกธนาคาร --</option>
+                <option value="KBANK">กสิกรไทย (KBANK)</option>
+                <option value="SCB">ไทยพาณิชย์ (SCB)</option>
+                <option value="KTB">กรุงไทย (KTB)</option>
+                <option value="BBL">กรุงเทพ (BBL)</option>
+                <option value="BAY">กรุงศรี (BAY)</option>
+                <option value="TTB">ทหารไทยธนชาต (TTB)</option>
+                <option value="GSB">ออมสิน (GSB)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>เลขบัญชีธนาคาร <span>*</span></label>
+            <input type="number" id="bank-account" placeholder="กรอกเฉพาะตัวเลข" required>
+        </div>
+
+        <button type="submit" class="btn-submit">🔒 ยืนยันการลงทะเบียน</button>
+    </form>
+</div>
+
+<div id="loading-screen" class="loading">
+    ⏳ กำลังเชื่อมต่อระบบ LINE...
+</div>
+
+<script>
+    // 🚨 ใส่ LIFF ID ของน้าตรงนี้เรียบร้อยแล้วครับ
+    const liffId = "2010761995-NNRUGId3"; 
+
+    async function initLIFF() {
+        try {
+            await liff.init({ liffId: liffId });
+            if (!liff.isLoggedIn()) {
+                liff.login(); // ถ้ายังไม่ได้ล็อกอิน ให้เด้งหน้าขอสิทธิ์ออโต้
+            } else {
+                const profile = await liff.getProfile();
+                
+                // แสดงข้อมูลโปรไฟล์ไลน์บนหน้าเว็บ
+                document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
+                document.getElementById('user-name').innerText = profile.displayName;
+                document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
+                
+                // ซ่อนหน้าโหลด แสดงหน้าฟอร์มจริง
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('main-card').style.display = 'block';
+            }
+        } catch (error) {
+            console.error("LIFF Initialization failed", error);
+            document.getElementById('loading-screen').innerText = "❌ เกิดข้อผิดพลาดในการเชื่อมต่อระบบ LINE";
+        }
+    }
+
+    // ทำงานเมื่อกดส่งฟอร์ม
+    document.getElementById('register-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // ดึงค่าที่ลูกค้ากรอกมาเตรียมใช้งาน
+        const userId = document.getElementById('user-id').innerText.replace('Line ID: ', '');
+        const fullname = document.getElementById('fullname').value;
+        const bank = document.getElementById('bank').value;
+        const account = document.getElementById('bank-account').value;
+
+        alert(`ระบบได้รับข้อมูลแล้ว!\nชื่อ: ${fullname}\nธนาคาร: ${bank}\nเลขบัญชี: ${account}\n\n(ขั้นตอนถัดไป: เชื่อมต่อยิงเข้า Firebase)`);
+        
+        // สั่งปิดหน้าต่างไลน์ออโต้หลังจากสมัครเสร็จ
+        liff.closeWindow();
+    });
+
+    window.onload = initLIFF;
+</script>
 
 </body>
 </html>
