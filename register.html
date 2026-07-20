@@ -114,42 +114,30 @@
     return value ? value.trim() : null;
 }
 
-    async function initLIFF() {
-    try {
-        // ให้ระบบ LINE LIFF เริ่มทำงานก่อน เพื่อจัดระเบียบลิงก์ URL
-        await liff.init({ liffId: liffId });
-        
-        // หลังจากเปิด LIFF แล้ว ค่อยสั่งให้ฟังก์ชันไปแกะค่า botUid ออกมา
-        targetBotUid = getQueryParam('botUid');
-        
-        if (!targetBotUid) {
-            document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
-            return;
-        }
+   async function initLIFF() {
+        try {
+            // 1. ลองดึงค่า botUid ตั้งแต่เริ่มแรกก่อนเลย
+            targetBotUid = getQueryParam('botUid');
+            
+            // 2. สั่งให้ LINE LIFF เริ่มทำงาน
+            await liff.init({ liffId: liffId });
+            
+            // 3. ถ้าดึงรอบแรกไม่เจอ ให้ลองดึงซ้ำอีกครั้งหลังจาก LIFF โหลดเสร็จ (เผื่อ LINE สลับลิงก์)
+            if (!targetBotUid) {
+                targetBotUid = getQueryParam('botUid');
+            }
+            
+            // 4. ถ้าทำทุกทางแล้วยังไม่มีค่าจริงๆ ถึงค่อยแจ้งเตือนลิงก์ไม่ถูกต้อง
+            if (!targetBotUid) {
+                document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>ลิงก์ไม่ถูกต้อง!</span><br>กรุณาพิมพ์คำว่า 'สมัคร' ในกลุ่มไลน์เพื่อให้บอทส่งลิงก์ที่ถูกต้องให้ครับ";
+                return;
+            }
 
-        // 🎯 วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ต่อตามปกติ
-        const oldUserRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
-        const oldUserSnapshot = await get(oldUserRef);
-        
-        if (oldUserSnapshot.exists() && oldUserSnapshot.val().bankAccount) {
-            document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกอยู่แล้ว!</span><br>ไอดีของคุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับ";
-            alert("⚠️ คุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับน้า!");
-            liff.closeWindow();
-            return;
-        }
-
-        // เช็กการเข้าสู่ระบบต่อได้เลย (ลบการสั่ง init ซ้ำออก)
-        if (!liff.isLoggedIn()) {
-            liff.login(); 
-        } else {
-            const profile = await liff.getProfile();
-            const webUserId = profile.userId; 
-
-            // 🎯 [เพิ่มใหม่] ป้องกันความปลอดภัยชั้นที่ 1: วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ทันที
+            // 🎯 วิ่งไปเช็กในกระเป๋าบอทเก่า (usersWallets) ทันที
             const oldUserRef = ref(db, 'system_data/usersWallets/' + targetBotUid);
             const oldUserSnapshot = await get(oldUserRef);
             
-            // ถ้าพบว่าไอดีไลน์บอทเก่านี้ มีข้อมูลธนาคารอยู่แล้ว (แปลว่าเป็นสมาชิกเก่าที่เคยลงทะเบียนแล้ว)
+            // ถ้าพบว่าไอดีไลน์บอทเก่านี้ มีข้อมูลธนาคารอยู่แล้ว
             if (oldUserSnapshot.exists() && oldUserSnapshot.val().bankAccount) {
                 document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกอยู่แล้ว!</span><br>ไอดีของคุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับ";
                 alert("⚠️ คุณได้ลงทะเบียนในระบบบอทป๊อกเด้งเรียบร้อยแล้ว ไม่ต้องสมัครซ้ำครับน้า!");
@@ -157,7 +145,7 @@
                 return;
             }
 
-            await liff.init({ liffId: liffId });
+            // เช็กสถานะการเข้าสู่ระบบ LINE
             if (!liff.isLoggedIn()) {
                 liff.login(); 
             } else {
@@ -175,16 +163,18 @@
                     return;
                 }
 
+                // นำข้อมูลโปรไฟล์มาแสดงในหน้าฟอร์ม
                 document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
                 document.getElementById('user-name').innerText = profile.displayName;
                 document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
                 
+                // ซ่อนหน้าจอโหลด แล้วแสดงการ์ดสมัครสมาชิก
                 document.getElementById('loading-screen').style.display = 'none';
                 document.getElementById('main-card').style.display = 'block';
             }
         } catch (error) {
             console.error("LIFF Initialization failed", error);
-            document.getElementById('loading-screen').innerText = "❌ เกิดข้อผิดพลาดในการเชื่อมต่อระบบ LINE";
+            document.getElementById('loading-screen').innerHTML = "❌ <span style='color:#ef4444'>เกิดข้อผิดพลาดในการเชื่อมต่อระบบ LINE</span><br>" + error.message;
         }
     }
 
