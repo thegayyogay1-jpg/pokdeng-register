@@ -122,9 +122,25 @@
     let currentLineProfile = null;
 
     // ฟังก์ชันสุ่มตัวเลข 6 หลัก
-    function generateRandomCode() {
-        const randNum = Math.floor(100000 + Math.random() * 900000);
-        return `c/${randNum}`;
+    async function generateRandomCode() {
+        let uniqueCode = "";
+        let isDuplicate = true;
+
+        while (isDuplicate) {
+            // สุ่มเลข 6 หลัก
+            const randNum = Math.floor(100000 + Math.random() * 900000);
+            uniqueCode = `c/${randNum}`;
+            const dbCodePath = uniqueCode.replace('/', '_');
+
+            // เช็กใน Firebase กล่อง pending_verify ว่ามีคนใช้อยู่ไหม
+            const checkRef = ref(db, 'pending_verify/' + dbCodePath);
+            const snapshot = await get(checkRef);
+
+            if (!snapshot.exists()) {
+                isDuplicate = false; // ถ้าไม่ซ้ำ ให้ออกจากลูปนำโค้ดนี้ไปใช้ได้เลย
+            }
+        }
+        return uniqueCode;
     }
 
     // ฟังก์ชันช่วยคัดลอกข้อความลง Clipboard
@@ -185,7 +201,7 @@
                 }
 
                 // สุ่มโค้ดรอไว้ (สำหรับผู้ใช้ใหม่)
-                generatedCode = generateRandomCode();
+                generatedCode = await generateRandomCode();
                 document.getElementById('verify-code').value = generatedCode;
 
                 // แสดงข้อมูลโปรไฟล์
