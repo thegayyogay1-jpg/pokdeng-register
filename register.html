@@ -78,7 +78,7 @@
             <input type="number" id="bank-account" placeholder="กรอกเฉพาะตัวเลข" required>
         </div>
 
-        <!-- 🎯 ช่องโค้ดยืนยันอัจฉริยะแบบที่น้าออกแบบ -->
+        <!-- 🎯 ช่องโค้ดยืนยันอัจฉริยะ -->
         <div class="form-group">
             <label>รหัสยืนยันระบบออโต้ (ระบบสุ่มให้)</label>
             <div class="code-input-wrapper">
@@ -88,7 +88,7 @@
             <small class="notice-text">⚠️ **ข้อสำคัญ:** หลังจากกดลงทะเบียนสำเร็จแล้ว กรุณากดคัดลอกรหัสนี้ไปส่งในกลุ่มไลน์ของน้าทันที เพื่อเปิดใช้งานระบบออโต้ครับ</small>
         </div>
 
-        <button type="submit" class="btn-submit">🔒 ยืนยันการลงทะเบียน</button>
+        <button type="submit" class="btn-submit" id="btn-submit-form">🔒 ยืนยันการลงทะเบียน</button>
     </form>
 </div>
 
@@ -98,9 +98,8 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, set, get, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // คีย์ข้อมูลของน้าเหมือนเดิม
     const firebaseConfig = {
       apiKey: "AIzaSyDgU2HELywrmi97-fAr38p5br4VLXIDq6I",
       authDomain: "my-pokdeng-bot.firebaseapp.com",
@@ -116,10 +115,11 @@
 
     const liffId = "2010761995-NNRUGId3"; 
     let generatedCode = ""; 
+    let currentLineProfile = null;
 
-    // ฟังก์ชันสุ่มตัวเลข 6 หลักตามแผนใหม่
+    // ฟังก์ชันสุ่มตัวเลข 6 หลัก
     function generateRandomCode() {
-        const randNum = Math.floor(100000 + Math.random() * 900000); // สุ่มเลข 6 หลัก (100000 - 999999)
+        const randNum = Math.floor(100000 + Math.random() * 900000);
         return `c/${randNum}`;
     }
 
@@ -129,28 +129,28 @@
             if (!liff.isLoggedIn()) {
                 liff.login(); 
             } else {
-                const profile = await liff.getProfile();
-                const webUserId = profile.userId; 
+                currentLineProfile = await liff.getProfile();
+                const webUserId = currentLineProfile.userId; 
 
-                // 🛡️ เช็กฝั่งหน้าเว็บประทับตราล็อกไอดี (ถ้าบัญชี LINE นี้ผูกถาวรไปแล้ว ไม่ให้สมัครซ้ำ)
-                const mappingRef = ref(db, 'liff_mapping/' + webUserId);
-                const mappingSnapshot = await get(mappingRef);
-                
-                if (mappingSnapshot.exists()) {
-                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเคยผูกบัญชีออโต้แล้ว!</span><br>บัญชี LINE นี้ทำรายการผูกระบบไปเรียบร้อยแล้วครับ";
-                    alert("⚠️ บัญชี LINE นี้เคยทำการผูกระบบออโต้ไปแล้วครับ!");
+                // 🛑 1. เช็กว่า LINE ID นี้ เป็นสมาชิกในระบบบอทแล้วหรือยัง (เช็กใน usersWallets)
+                const usersWalletsRef = ref(db, 'system_data/usersWallets/' + webUserId);
+                const walletSnapshot = await get(usersWalletsRef);
+
+                if (walletSnapshot.exists()) {
+                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกในระบบเรียบร้อยแล้ว!</span><br>บัญชี LINE นี้ลงทะเบียนสำเร็จแล้ว สามารถใช้งานในกลุ่มได้ทันทีครับ";
+                    alert("⚠️ คุณเป็นสมาชิกในระบบอยู่แล้ว ไม่จำเป็นต้องลงทะเบียนซ้ำครับ!");
                     liff.closeWindow();
                     return;
                 }
 
-                // สุ่มโค้ดสะพานเชื่อมรอไว้ทันทีตอนเปิดหน้าเว็บ
+                // สุ่มโค้ดรอไว้สำหรับลงทะเบียน
                 generatedCode = generateRandomCode();
                 document.getElementById('verify-code').value = generatedCode;
 
-                // ใส่ข้อมูลโปรไฟล์ลงหน้าจอ
-                document.getElementById('user-avatar').src = profile.pictureUrl || 'https://via.placeholder.com/150';
-                document.getElementById('user-name').innerText = profile.displayName;
-                document.getElementById('user-id').innerText = `Line ID: ${profile.userId}`;
+                // แสดงข้อมูลโปรไฟล์
+                document.getElementById('user-avatar').src = currentLineProfile.pictureUrl || 'https://via.placeholder.com/150';
+                document.getElementById('user-name').innerText = currentLineProfile.displayName;
+                document.getElementById('user-id').innerText = `Line ID: ${currentLineProfile.userId}`;
                 
                 document.getElementById('loading-screen').style.display = 'none';
                 document.getElementById('main-card').style.display = 'block';
@@ -161,56 +161,89 @@
         }
     }
 
-    // ระบบคลิกคัดลอกรหัสลงคลิปบอร์ด
+    // คัดลอกรหัส
     document.getElementById('btn-copy-code').addEventListener('click', function() {
         const codeInput = document.getElementById('verify-code');
         navigator.clipboard.writeText(codeInput.value).then(() => {
             alert("📋 คัดลอกรหัส: " + codeInput.value + " เรียบร้อยแล้วครับ! อย่าลืมเอาไปส่งในกลุ่มนะครับ");
         }).catch(err => {
-            console.error('Failed to copy text: ', err);
-            // กรณีเบราว์เซอร์เก่าจัดๆ ให้คัดลอกด้วยวิธีดั้งเดิม
             codeInput.select();
             document.execCommand('copy');
             alert("📋 คัดลอกรหัสเรียบร้อยแล้วครับ!");
         });
     });
 
-    // ตอนกดยืนยันการลงทะเบียน
+    // กดยืนยันการลงทะเบียน
     document.getElementById('register-form').addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const webUserId = document.getElementById('user-id').innerText.replace('Line ID: ', '').trim();
+        const btnSubmit = document.getElementById('btn-submit-form');
+        btnSubmit.disabled = true;
+        btnSubmit.innerText = "⏳ กำลังบันทึกข้อมูล...";
+
+        const webUserId = currentLineProfile ? currentLineProfile.userId : "";
+        const lineDisplayName = currentLineProfile ? currentLineProfile.displayName : "";
         const fullname = document.getElementById('fullname').value.trim();
         const bank = document.getElementById('bank').value;
         const account = document.getElementById('bank-account').value.trim();
 
         if (!webUserId || !generatedCode) {
             alert("❌ ข้อมูลไม่ครบถ้วน กรุณาลองใหม่อีกครั้งครับ");
+            btnSubmit.disabled = false;
+            btnSubmit.innerText = "🔒 ยืนยันการลงทะเบียน";
             return;
         }
 
-        // แปลงรหัสสุ่มให้ไม่มีเครื่องหมาย / เพื่อป้องกันโฟลเดอร์ใน Firebase บิดเบี้ยว (เช่น จาก c/123456 เป็น c_123456)
-        const dbCodePath = generatedCode.replace('/', '_');
-        
-        // 🎯 บันทึกเข้าถังพักชั่วคราว (pending_verify) รอให้บอท 1 มารับช่วงต่อ
-        const pendingRef = ref(db, 'pending_verify/' + dbCodePath);
-
         try {
-            // บันทึกข้อมูลที่สมาชิกกรอกลงกล่องชั่วคราว
+            // 🛑 2. เช็กว่าเลขบัญชีนี้ เคยลงทะเบียนไว้แล้วหรือยัง
+            const allWalletsRef = ref(db, 'system_data/usersWallets');
+            const allWalletsSnapshot = await get(allWalletsRef);
+            if (allWalletsSnapshot.exists()) {
+                const allWallets = allWalletsSnapshot.val();
+                for (let uid in allWallets) {
+                    if (allWallets[uid].bankAccount === account) {
+                        alert("❌ เลขบัญชีธนาคารนี้ถูกใช้งานในระบบแล้ว ไม่สามารถใช้ซ้ำได้ครับ!");
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerText = "🔒 ยืนยันการลงทะเบียน";
+                        return;
+                    }
+                }
+            }
+
+            // 🧹 3. เคลียร์โค้ดเก่าของ "คนนี้คนเดียว" ใน pending_verify (ถ้ามี) ก่อนสร้างโค้ดใหม่
+            const pendingAllRef = ref(db, 'pending_verify');
+            const pendingSnapshot = await get(pendingAllRef);
+            if (pendingSnapshot.exists()) {
+                const pendingData = pendingSnapshot.val();
+                for (let codeKey in pendingData) {
+                    if (pendingData[codeKey].lineUserId === webUserId) {
+                        // ลบโค้ดเก่าเฉพาะของยูสเซอร์รายนี้
+                        await remove(ref(db, `pending_verify/${codeKey}`));
+                    }
+                }
+            }
+
+            // 🎯 4. บันทึกข้อมูลโค้ดใหม่ลง pending_verify
+            const dbCodePath = generatedCode.replace('/', '_');
+            const pendingRef = ref(db, 'pending_verify/' + dbCodePath);
+
             await set(pendingRef, {
-                name: fullname,
-                bankName: bank,
-                bankAccount: account,
+                lineUserId: webUserId,        // 🆔 เก็บไว้เช็กเจ้าของ
+                lineName: lineDisplayName,    // 💬 ชื่อ LINE
+                name: fullname,               // 👤 ชื่อ-นามสกุลจริง
+                bankName: bank,               // 🏦 ธนาคาร
+                bankAccount: account,         // 🔢 เลขบัญชี
                 registeredAt: new Date().toISOString()
             });
 
-            // ปลุกแจ้งเตือนและย้ำให้น้าๆ คัดลอกโค้ดอีกครั้ง
             alert(`🎉 ลงทะเบียนสำเร็จ!\n\nกรุณานำโค้ด: ${generatedCode} ไปพิมพ์ส่งในกลุ่มไลน์ทันทีเพื่อเปิดระบบออโต้ครับน้า`);
             liff.closeWindow();
 
         } catch (error) {
             console.error("Firebase save error:", error);
             alert("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้งครับน้า");
+            btnSubmit.disabled = false;
+            btnSubmit.innerText = "🔒 ยืนยันการลงทะเบียน";
         }
     });
 
