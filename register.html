@@ -23,7 +23,6 @@
         .form-group input, .form-group select { width: 100%; padding: 12px 15px; background-color: #111827; border: 1px solid #374151; border-radius: 10px; color: #ffffff; font-size: 16px; transition: all 0.3s; }
         .form-group input:focus, .form-group select:focus { border-color: #10b981; outline: none; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
         
-        /* สไตล์เพิ่มเติมสำหรับช่องโค้ดยืนยัน */
         .code-input-wrapper { display: flex; gap: 10px; }
         .code-input-wrapper input { background-color: #1f2937; color: #f59e0b; font-weight: bold; letter-spacing: 1px; text-align: center; border: 1px dashed #f59e0b; cursor: not-allowed; }
         .btn-copy { padding: 0 15px; background-color: #374151; border: 1px solid #4b5563; border-radius: 10px; color: #ffffff; font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
@@ -32,7 +31,12 @@
         
         .btn-submit { width: 100%; padding: 14px; background-color: #10b981; border: none; border-radius: 10px; color: #ffffff; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; margin-top: 10px; }
         .btn-submit:hover { background-color: #059669; }
-        .loading { text-align: center; color: #10b981; font-size: 16px; padding: 20px; }
+        .loading { text-align: center; color: #10b981; font-size: 16px; padding: 20px; line-height: 1.6; }
+
+        /* สไตล์ปุ่มคัดลอกในหน้าแจ้งเตือนคนเคยสมัครแล้ว */
+        .already-box { background-color: #1f2937; border-radius: 12px; padding: 15px; margin-top: 15px; border: 1px solid #f59e0b; }
+        .btn-copy-already { background-color: #f59e0b; color: #000; border: none; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; margin-top: 12px; font-size: 14px; width: 100%; }
+        .btn-copy-already:hover { background-color: #d97706; }
     </style>
 </head>
 <body>
@@ -123,6 +127,27 @@
         return `c/${randNum}`;
     }
 
+    // ฟังก์ชันช่วยคัดลอกข้อความลง Clipboard
+    function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert(`📋 คัดลอกรหัส [ ${text} ] เรียบร้อยแล้วครับ!\nอย่าลืมนำไปพิมพ์ส่งในกลุ่มไลน์นะครับ`);
+            }).catch(() => { fallbackCopy(text); });
+        } else {
+            fallbackCopy(text);
+        }
+    }
+
+    function fallbackCopy(text) {
+        const tempInput = document.createElement("input");
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempInput);
+        alert(`📋 คัดลอกรหัส [ ${text} ] เรียบร้อยแล้วครับ!`);
+    }
+
     async function initLIFF() {
         try {
             await liff.init({ liffId: liffId });
@@ -132,18 +157,34 @@
                 currentLineProfile = await liff.getProfile();
                 const webUserId = currentLineProfile.userId; 
 
-                // 🛑 1. ด่านแรก: เช็กไอดี LINE กับกล่อง registered_users บน Firebase ทันทีที่เปิดหน้าเว็บ!
+                // 🛑 1. ด่านแรก: เช็กไอดี LINE กับกล่อง registered_users
                 const regUserRef = ref(db, 'registered_users/' + webUserId);
                 const regSnapshot = await get(regUserRef);
 
                 if (regSnapshot.exists()) {
-                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b; font-size: 18px;'>คุณเคยสมัครสมาชิกไปแล้ว!</span><br><br>บัญชี LINE นี้ทำรายการลงทะเบียนในระบบเรียบร้อยแล้ว ไม่สามารถสมัครซ้ำได้ครับ";
-                    alert("⚠️ คุณเคยสมัครสมาชิกไปแล้วครับ ไม่สามารถลงทะเบียนซ้ำได้!");
-                    liff.closeWindow();
+                    const userData = regSnapshot.val();
+                    const userCode = userData.code || "ไม่พบโค้ด";
+
+                    // 🎯 แสดงหน้าแจ้งเตือนพร้อมปุ่มคัดลอกโค้ดเดิมทันที!
+                    document.getElementById('loading-screen').innerHTML = `
+                        ⚠️ <span style='color:#f59e0b; font-size: 18px; font-weight:bold;'>คุณเคยลงทะเบียนไว้แล้ว!</span><br>
+                        <div class="already-box">
+                            <span style="color:#9ca3af; font-size:14px;">รหัสยืนยันเดิมของคุณคือ:</span><br>
+                            <span style="color:#00ffcc; font-size:22px; font-weight:bold; letter-spacing:1px;">${userCode}</span><br>
+                            <button id="btn-copy-exist" class="btn-copy-already">📋 คัดลอกรหัส ${userCode}</button>
+                        </div>
+                        <p style="color:#6b7280; font-size:12px; margin-top:15px;">กรุณากดคัดลอกรหัส แล้วนำไปส่งในกลุ่มไลน์เพื่อเปิดใช้งานครับ</p>
+                    `;
+
+                    // ผูกอีเวนต์กดปุ่มคัดลอกโค้ดเดิม
+                    document.getElementById('btn-copy-exist').addEventListener('click', function() {
+                        copyToClipboard(userCode);
+                    });
+
                     return;
                 }
 
-                // สุ่มโค้ดรอไว้ (สำหรับคนใหม่ที่ยังไม่เคยสมัคร)
+                // สุ่มโค้ดรอไว้ (สำหรับผู้ใช้ใหม่)
                 generatedCode = generateRandomCode();
                 document.getElementById('verify-code').value = generatedCode;
 
@@ -161,16 +202,9 @@
         }
     }
 
-    // คัดลอกรหัส
+    // ปุ่มคัดลอกรหัสหน้าลงทะเบียน
     document.getElementById('btn-copy-code').addEventListener('click', function() {
-        const codeInput = document.getElementById('verify-code');
-        navigator.clipboard.writeText(codeInput.value).then(() => {
-            alert("📋 คัดลอกรหัส: " + codeInput.value + " เรียบร้อยแล้วครับ! อย่าลืมเอาไปส่งในกลุ่มนะครับ");
-        }).catch(err => {
-            codeInput.select();
-            document.execCommand('copy');
-            alert("📋 คัดลอกรหัสเรียบร้อยแล้วครับ!");
-        });
+        copyToClipboard(generatedCode);
     });
 
     // กดยืนยันการลงทะเบียน
@@ -195,10 +229,11 @@
         }
 
         try {
-            // 🎯 1. บันทึก LINE User ID นี้ลงกล่อง registered_users ถาวรทันที! (เพื่อใช้บล็อกด่านแรกในอนาคต)
+            // 🎯 1. บันทึก LINE User ID + เก็บโค้ด c/xxxxx ไว้ใช้แสดงผลวันหลังด้วย!
             const regUserRef = ref(db, 'registered_users/' + webUserId);
             await set(regUserRef, {
                 name: fullname,
+                code: generatedCode, // 👈 เก็บโค้ดประจำตัวไว้ตรงนี้
                 registeredAt: new Date().toISOString()
             });
 
