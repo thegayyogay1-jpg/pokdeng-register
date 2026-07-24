@@ -98,7 +98,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, set, get, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+    import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDgU2HELywrmi97-fAr38p5br4VLXIDq6I",
@@ -132,18 +132,18 @@
                 currentLineProfile = await liff.getProfile();
                 const webUserId = currentLineProfile.userId; 
 
-                // 🛑 1. เช็กว่า LINE ID นี้ เป็นสมาชิกในระบบบอทแล้วหรือยัง (เช็กใน usersWallets)
-                const usersWalletsRef = ref(db, 'system_data/usersWallets/' + webUserId);
-                const walletSnapshot = await get(usersWalletsRef);
+                // 🛑 1. ด่านแรก: เช็กไอดี LINE กับกล่อง registered_users บน Firebase ทันทีที่เปิดหน้าเว็บ!
+                const regUserRef = ref(db, 'registered_users/' + webUserId);
+                const regSnapshot = await get(regUserRef);
 
-                if (walletSnapshot.exists()) {
-                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b'>คุณเป็นสมาชิกในระบบเรียบร้อยแล้ว!</span><br>บัญชี LINE นี้ลงทะเบียนสำเร็จแล้ว สามารถใช้งานในกลุ่มได้ทันทีครับ";
-                    alert("⚠️ คุณเป็นสมาชิกในระบบอยู่แล้ว ไม่จำเป็นต้องลงทะเบียนซ้ำครับ!");
+                if (regSnapshot.exists()) {
+                    document.getElementById('loading-screen').innerHTML = "⚠️ <span style='color:#f59e0b; font-size: 18px;'>คุณเคยสมัครสมาชิกไปแล้ว!</span><br><br>บัญชี LINE นี้ทำรายการลงทะเบียนในระบบเรียบร้อยแล้ว ไม่สามารถสมัครซ้ำได้ครับ";
+                    alert("⚠️ คุณเคยสมัครสมาชิกไปแล้วครับ ไม่สามารถลงทะเบียนซ้ำได้!");
                     liff.closeWindow();
                     return;
                 }
 
-                // สุ่มโค้ดรอไว้สำหรับลงทะเบียน
+                // สุ่มโค้ดรอไว้ (สำหรับคนใหม่ที่ยังไม่เคยสมัคร)
                 generatedCode = generateRandomCode();
                 document.getElementById('verify-code').value = generatedCode;
 
@@ -195,44 +195,23 @@
         }
 
         try {
-            // 🛑 2. เช็กว่าเลขบัญชีนี้ เคยลงทะเบียนไว้แล้วหรือยัง
-            const allWalletsRef = ref(db, 'system_data/usersWallets');
-            const allWalletsSnapshot = await get(allWalletsRef);
-            if (allWalletsSnapshot.exists()) {
-                const allWallets = allWalletsSnapshot.val();
-                for (let uid in allWallets) {
-                    if (allWallets[uid].bankAccount === account) {
-                        alert("❌ เลขบัญชีธนาคารนี้ถูกใช้งานในระบบแล้ว ไม่สามารถใช้ซ้ำได้ครับ!");
-                        btnSubmit.disabled = false;
-                        btnSubmit.innerText = "🔒 ยืนยันการลงทะเบียน";
-                        return;
-                    }
-                }
-            }
+            // 🎯 1. บันทึก LINE User ID นี้ลงกล่อง registered_users ถาวรทันที! (เพื่อใช้บล็อกด่านแรกในอนาคต)
+            const regUserRef = ref(db, 'registered_users/' + webUserId);
+            await set(regUserRef, {
+                name: fullname,
+                registeredAt: new Date().toISOString()
+            });
 
-            // 🧹 3. เคลียร์โค้ดเก่าของ "คนนี้คนเดียว" ใน pending_verify (ถ้ามี) ก่อนสร้างโค้ดใหม่
-            const pendingAllRef = ref(db, 'pending_verify');
-            const pendingSnapshot = await get(pendingAllRef);
-            if (pendingSnapshot.exists()) {
-                const pendingData = pendingSnapshot.val();
-                for (let codeKey in pendingData) {
-                    if (pendingData[codeKey].lineUserId === webUserId) {
-                        // ลบโค้ดเก่าเฉพาะของยูสเซอร์รายนี้
-                        await remove(ref(db, `pending_verify/${codeKey}`));
-                    }
-                }
-            }
-
-            // 🎯 4. บันทึกข้อมูลโค้ดใหม่ลง pending_verify
+            // 🎯 2. บันทึกข้อมูลเข้า pending_verify เพื่อรอให้บอทในกลุ่มดึงไปใช้สร้างกระเป๋าเงิน
             const dbCodePath = generatedCode.replace('/', '_');
             const pendingRef = ref(db, 'pending_verify/' + dbCodePath);
 
             await set(pendingRef, {
-                lineUserId: webUserId,        // 🆔 เก็บไว้เช็กเจ้าของ
-                lineName: lineDisplayName,    // 💬 ชื่อ LINE
-                name: fullname,               // 👤 ชื่อ-นามสกุลจริง
-                bankName: bank,               // 🏦 ธนาคาร
-                bankAccount: account,         // 🔢 เลขบัญชี
+                lineUserId: webUserId,
+                lineName: lineDisplayName,
+                name: fullname,
+                bankName: bank,
+                bankAccount: account,
                 registeredAt: new Date().toISOString()
             });
 
